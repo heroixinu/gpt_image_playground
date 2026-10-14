@@ -1302,7 +1302,7 @@ describe('custom providers', () => {
     expect(settings.profiles[0]).toMatchObject({
       provider: 'sb2api-async',
       apiMode: 'images',
-      apiProxy: false,
+      apiProxy: true,
       streamImages: false,
     })
     expect(provider).toMatchObject({
