@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": false
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api-proxy/:path*",
+      "destination": "https://subapi.iorz.de/v1/:path*"
+    }
+  ]
 }
