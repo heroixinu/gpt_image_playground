@@ -371,13 +371,13 @@ export function normalizeCustomProviderDefinitions(input: unknown): CustomProvid
 
 export function createDefaultOpenAIProfile(overrides: Partial<ApiProfile> = {}): ApiProfile {
   const apiMode = overrides.apiMode ?? DEFAULT_API_URL_PATCH?.apiMode ?? 'images'
-  const streamImages = overrides.streamImages ?? DEFAULT_API_URL_PATCH?.streamImages ?? getDefaultStreamImages(RAW_DEFAULT_API_URL ? 'openai' : 'sb2api-async', apiMode)
+  const streamImages = overrides.streamImages ?? DEFAULT_API_URL_PATCH?.streamImages ?? getDefaultStreamImages('openai', apiMode)
 
   return {
     id: DEFAULT_OPENAI_PROFILE_ID,
     name: DEFAULT_API_URL_PATCH?.name ?? '默认',
-    provider: RAW_DEFAULT_API_URL ? 'openai' : 'sb2api-async',
-    baseUrl: RAW_DEFAULT_API_URL ? DEFAULT_BASE_URL : 'https://subapi.iorz.de/v1',
+    provider: 'openai',
+    baseUrl: DEFAULT_BASE_URL,
     apiKey: DEFAULT_API_URL_PATCH?.apiKey ?? '',
     model: DEFAULT_API_URL_PATCH?.model ?? (apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL),
     imageGenerationModel: DEFAULT_API_URL_PATCH?.imageGenerationModel ?? DEFAULT_IMAGES_MODEL,
@@ -1310,7 +1310,7 @@ export function mergePresetImportedSettings(
 }
 
 export const DEFAULT_SETTINGS: AppSettings = normalizeSettings({
-  profiles: [createDefaultOpenAIProfile()],
+  profiles: [RAW_DEFAULT_API_URL ? createDefaultOpenAIProfile() : createDefaultOpenAIProfile({ provider: 'sb2api-async', baseUrl: 'https://subapi.iorz.de/v1', streamImages: false })],
   baseUrl: DEFAULT_BASE_URL,
   apiKey: DEFAULT_API_URL_PATCH?.apiKey ?? '',
   model: DEFAULT_API_URL_PATCH?.model ?? (DEFAULT_API_URL_PATCH?.apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL),
