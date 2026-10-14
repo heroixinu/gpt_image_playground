@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { initStore, useStore } from './store'
 import { clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
-import { createDefaultOpenAIProfile, hasDefaultPresetConfig, isAgentTextApiProfile, normalizeSettings } from './lib/apiProfiles'
+import { DEFAULT_SETTINGS, hasDefaultPresetConfig, isAgentTextApiProfile, normalizeSettings } from './lib/apiProfiles'
 import { getCustomProviderConfigUrl, hasEmbeddedDefaultConfig, loadCustomProviderSettingsFromUrl, loadEmbeddedDefaultConfig } from './lib/customProviderConfigUrl'
 import { getDefaultPresetProfileId, getPresetProfileIds, isPresetConfigOnlyEnabled, setPresetConfig } from './lib/presetConfig'
 import { useDockerApiUrlMigrationNotice } from './hooks/useDockerApiUrlMigrationNotice'
@@ -130,7 +130,7 @@ export default function App() {
           : hasDefaultPresetConfig()
             ? {
                 customProviders: [],
-                profiles: [{ ...createDefaultOpenAIProfile(), isDefault: true }],
+                profiles: [{ ...DEFAULT_SETTINGS.profiles[0], isDefault: true }],
               }
             : null
         setPresetConfig(importedSettings)

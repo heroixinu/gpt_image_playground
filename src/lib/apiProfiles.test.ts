@@ -30,6 +30,16 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+describe('default deployment profile', () => {
+  it('uses the async Sub2API provider for a deployment without an explicit preset', () => {
+    // The startup preset must reuse DEFAULT_SETTINGS rather than constructing
+    // an OpenAI-only profile via createDefaultOpenAIProfile().
+    const profile = DEFAULT_SETTINGS.profiles[0]
+    expect(profile.provider).toBe('sb2api-async')
+    expect(profile.streamImages).toBe(false)
+  })
+})
+
 describe('validateApiProfile', () => {
   it('allows empty API URL when API proxy is enabled and available', () => {
     vi.stubEnv('VITE_API_PROXY_AVAILABLE', 'true')
