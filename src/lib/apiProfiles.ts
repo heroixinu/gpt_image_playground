@@ -1310,7 +1310,7 @@ export function mergePresetImportedSettings(
 }
 
 export const DEFAULT_SETTINGS: AppSettings = normalizeSettings({
-  profiles: [RAW_DEFAULT_API_URL ? createDefaultOpenAIProfile() : createDefaultOpenAIProfile({ provider: 'sb2api-async', baseUrl: 'https://subapi.iorz.de/v1', streamImages: false })],
+  profiles: [createDefaultOpenAIProfile({ provider: 'sb2api-async', baseUrl: DEFAULT_OPENAI_API_PROXY && !RAW_DEFAULT_API_URL ? '' : DEFAULT_BASE_URL, streamImages: false })],
   baseUrl: DEFAULT_BASE_URL,
   apiKey: DEFAULT_API_URL_PATCH?.apiKey ?? '',
   model: DEFAULT_API_URL_PATCH?.model ?? (DEFAULT_API_URL_PATCH?.apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL),
