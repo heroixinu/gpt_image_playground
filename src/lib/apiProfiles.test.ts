@@ -32,8 +32,6 @@ afterEach(() => {
 
 describe('default deployment profile', () => {
   it('uses the async Sub2API provider for a deployment without an explicit preset', () => {
-    // The startup preset must reuse DEFAULT_SETTINGS rather than constructing
-    // an OpenAI-only profile via createDefaultOpenAIProfile().
     const profile = DEFAULT_SETTINGS.profiles[0]
     expect(profile.provider).toBe('sb2api-async')
     expect(profile.streamImages).toBe(false)
@@ -119,6 +117,13 @@ describe('normalizeSettings', () => {
 
     expect(settings.profiles[0].description).toBe('支持 **Markdown**')
     expect(settings.profiles[1].description).toBeUndefined()
+  })
+
+  it('keeps valid color modes and falls back to following the system', () => {
+    expect(normalizeSettings({ enterSubmit: true }).colorMode).toBe('system')
+    expect(normalizeSettings({ colorMode: 'light' }).colorMode).toBe('light')
+    expect(normalizeSettings({ colorMode: 'dark' }).colorMode).toBe('dark')
+    expect(normalizeSettings({ colorMode: 'bogus' }).colorMode).toBe('system')
   })
 
   it('defaults font settings to following the deployment for old data', () => {
