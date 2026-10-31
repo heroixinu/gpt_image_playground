@@ -1,13 +1,15 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useStore, reuseConfig, editOutputs, removeTask, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
 import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds } from '../lib/favoriteState'
+import { getPageScroller, getPageScrollTop } from '../lib/pageScroll'
 import { isTauri } from '../lib/platform'
 import { getIndexesInRect } from '../lib/virtualGrid'
 import { useVirtualGrid } from '../hooks/useVirtualGrid'
+import { useVisibleTasks } from '../hooks/usePrivacyMode'
 import TaskCard from './TaskCard'
 
 export default function TaskGrid() {
-  const tasks = useStore((s) => s.tasks)
+  const tasks = useVisibleTasks()
   const searchQuery = useStore((s) => s.searchQuery)
   const filterStatus = useStore((s) => s.filterStatus)
   const filterFavorite = useStore((s) => s.filterFavorite)
@@ -63,7 +65,7 @@ export default function TaskGrid() {
 
   const getPagePoint = (clientX: number, clientY: number) => ({
     pageX: clientX + window.scrollX,
-    pageY: clientY + window.scrollY,
+    pageY: clientY + getPageScrollTop(),
   })
 
   const beginSelection = (target: HTMLElement, clientX: number, clientY: number, isCtrl: boolean) => {
@@ -100,7 +102,7 @@ export default function TaskGrid() {
     const list = filteredTasksRef.current
     const gridRect = gridRef.current.getBoundingClientRect()
     const gridLeft = gridRect.left + window.scrollX
-    const gridTop = gridRect.top + window.scrollY
+    const gridTop = gridRect.top + getPageScrollTop()
     const hit = new Set(getIndexesInRect(list.length, metricsRef.current, {
       left: minX - gridLeft,
       right: maxX - gridLeft,
@@ -140,7 +142,7 @@ export default function TaskGrid() {
       stopDragScroll()
       dragScrollDirectionRef.current = direction
       dragScrollIntervalRef.current = window.setInterval(() => {
-        window.scrollBy({ top: direction * 15, behavior: 'instant' })
+        getPageScroller().scrollBy({ top: direction * 15, behavior: 'instant' })
       }, 16)
     }
 
@@ -284,7 +286,7 @@ export default function TaskGrid() {
             <p className="text-sm">输入提示词开始生成图片</p>
             {isTauri && !tasks.length && (
               <p className="mt-3 text-xs">
-                从网页版迁移：在网页版的「设置 → 数据管理」中导出备份，再
+                从网页版迁移：在网页版的 <strong className="font-semibold">设置 → 数据管理</strong> 中导出备份，再
                 <button
                   type="button"
                   onClick={() => setShowSettings(true, 'data')}
@@ -338,7 +340,7 @@ export default function TaskGrid() {
           className="fixed bg-blue-500/20 border border-blue-500/50 pointer-events-none z-[30]"
           style={{
             left: Math.min(selectionBox.startPageX, selectionBox.currentPageX) - window.scrollX,
-            top: Math.min(selectionBox.startPageY, selectionBox.currentPageY) - window.scrollY,
+            top: Math.min(selectionBox.startPageY, selectionBox.currentPageY) - getPageScrollTop(),
             width: Math.abs(selectionBox.currentPageX - selectionBox.startPageX),
             height: Math.abs(selectionBox.currentPageY - selectionBox.startPageY),
           }}
