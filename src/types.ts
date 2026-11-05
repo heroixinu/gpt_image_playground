@@ -94,6 +94,8 @@ export interface ApiProfile {
   streamImages?: boolean
   streamPartialImages?: number
   transparentBackgroundMethod: 'api' | 'local'
+  /** 生成 SVG 时负责编写 SVG 的文本模型，留空使用默认值 */
+  svgModel?: string
   providerDrafts?: Partial<Record<ApiProvider, Partial<Pick<ApiProfile, 'baseUrl' | 'model' | 'imageGenerationModel' | 'apiMode' | 'reasoningEffort' | 'codexCli' | 'apiProxy' | 'responseFormatB64Json' | 'streamImages' | 'streamPartialImages' | 'transparentBackgroundMethod'>>>>
 }
 
@@ -155,6 +157,8 @@ export interface AppSettings {
   persistInputOnRestart: boolean
   reuseTaskApiProfileTemporarily: boolean
   alwaysShowRetryButton: boolean
+  /** 在收藏夹页新建的任务自动加入当前收藏夹 */
+  saveTasksToActiveFavoriteCollection: boolean
   retryMode: RetryMode
   allowPromptRewrite: boolean
   taskCompletionNotification: boolean
@@ -197,24 +201,37 @@ export interface AppSettings {
 
 // ===== 任务参数 =====
 
+export const OUTPUT_FORMATS = ['png', 'jpeg', 'webp', 'svg', 'gif'] as const
+export const IMAGE_COMPLEXITIES = ['auto', 'low', 'medium', 'high'] as const
+export const GIF_FRAME_COUNT_RANGE = { min: 2, max: 16 }
+export const GIF_FRAME_DURATION_RANGE = { min: 20, max: 2000 }
+
 export interface TaskParams {
   size: string
   quality: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
-  output_format: 'png' | 'jpeg' | 'webp'
+  /** auto 表示不发送，由模型使用默认值 */
+  complexity: typeof IMAGE_COMPLEXITIES[number]
+  output_format: typeof OUTPUT_FORMATS[number]
   output_compression: number | null
   moderation: 'auto' | 'low'
   n: number
   transparent_output: boolean
+  /** 仅 GIF 输出 */
+  frame_count: number
+  frame_duration_ms: number
 }
 
 export const DEFAULT_PARAMS: TaskParams = {
   size: 'auto',
   quality: 'auto',
+  complexity: 'auto',
   output_format: 'png',
   output_compression: null,
   moderation: 'auto',
   n: 1,
   transparent_output: false,
+  frame_count: 9,
+  frame_duration_ms: 200,
 }
 
 // ===== 输入图片（UI 层面） =====
@@ -224,6 +241,8 @@ export interface InputImage {
   id: string
   /** data URL，用于预览 */
   dataUrl: string
+  /** 草图板画在这张图上的透明标注层（image store id），尺寸与原图一致 */
+  markupImageId?: string
 }
 
 /** 参考图上的评论标注，x / y 为相对原图宽高的比例（0~1） */
@@ -291,6 +310,8 @@ export interface TaskRecord {
   inputImageIds: string[]
   maskTargetImageId?: string | null
   maskImageId?: string | null
+  /** 随第一张参考图发送的 markup 标注层 image store id */
+  markupImageId?: string | null
   /** 输出图片的 image store id 列表 */
   outputImages: string[]
   /** 并发多图中失败的输出槽位，requestIndex 为从 0 开始的请求序号 */
@@ -556,4 +577,18 @@ export interface ExportData {
     height?: number
     thumbnailVersion?: number
   }>
+}
+
+// ===== Skill（仅客户端） =====
+
+/** 对应 Rust `src-tauri/src/cli/skill.rs` 的 `SkillTarget`：`~/.claude/skills` 或 `~/.agents/skills` */
+export type SkillTarget = 'claude' | 'agents'
+/** 对应 Rust `State`：找不到用户文件夹、未安装、已安装、已安装但与当前版本不同、同名文件夹不是本应用的 Skill */
+export type SkillState = 'notFound' | 'absent' | 'added' | 'outdated' | 'invalid'
+
+export interface SkillInfo {
+  /** 随安装包附带的 Skill 文件夹 */
+  skillDir: string
+  /** `path` 为安装后的 Skill 文件夹 */
+  skills: { id: SkillTarget; path: string; state: SkillState }[]
 }

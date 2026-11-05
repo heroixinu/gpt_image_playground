@@ -61,6 +61,20 @@ const DEFAULT_GENERATE_BODY = {
   background: '$params.background',
 }
 const DEFAULT_EDIT_BODY = DEFAULT_GENERATE_BODY
+// Use 2.6 fields only when the request context exposes them; absent variables are omitted.
+const SUB2API_GENERATE_BODY = {
+  ...DEFAULT_GENERATE_BODY,
+  complexity: '$params.complexity',
+  frame_count: '$params.frame_count',
+  frame_duration_ms: '$params.frame_duration_ms',
+  svg: '$params.svg',
+}
+const SUB2API_EDIT_BODY = {
+  ...DEFAULT_EDIT_BODY,
+  complexity: '$params.complexity',
+  frame_count: '$params.frame_count',
+  frame_duration_ms: '$params.frame_duration_ms',
+}
 const DEFAULT_OPENAI_RESULT: CustomProviderResultMapping = {
   imageUrlPaths: ['data.*.url'],
   b64JsonPaths: ['data.*.b64_json'],
@@ -78,14 +92,14 @@ const SUB2API_PROVIDER: CustomProviderDefinition = {
     path: 'images/generations/async',
     method: 'POST',
     contentType: 'json',
-    body: DEFAULT_GENERATE_BODY,
+    body: SUB2API_GENERATE_BODY,
     taskIdPath: 'task_id',
   },
   editSubmit: {
     path: 'images/edits/async',
     method: 'POST',
     contentType: 'multipart',
-    body: DEFAULT_EDIT_BODY,
+    body: SUB2API_EDIT_BODY,
     files: DEFAULT_EDIT_FILES,
     taskIdPath: 'task_id',
   },
@@ -597,6 +611,7 @@ export function normalizeApiProfile(
     transparentBackgroundMethod: !nativeTransparentBackgroundUnavailable && (record.transparentBackgroundMethod === 'api' || record.transparentBackgroundMethod === 'local')
       ? record.transparentBackgroundMethod
       : defaults.transparentBackgroundMethod,
+    svgModel: typeof record.svgModel === 'string' && record.svgModel.trim() ? record.svgModel.trim() : undefined,
     providerDrafts: normalizeProviderDrafts(record.providerDrafts, customProviderIds, nativeTransparentProviderIds),
   }
 }
@@ -737,6 +752,7 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
     persistInputOnRestart: typeof record.persistInputOnRestart === 'boolean' ? record.persistInputOnRestart : true,
     reuseTaskApiProfileTemporarily: typeof record.reuseTaskApiProfileTemporarily === 'boolean' ? record.reuseTaskApiProfileTemporarily : false,
     alwaysShowRetryButton: typeof record.alwaysShowRetryButton === 'boolean' ? record.alwaysShowRetryButton : false,
+    saveTasksToActiveFavoriteCollection: typeof record.saveTasksToActiveFavoriteCollection === 'boolean' ? record.saveTasksToActiveFavoriteCollection : true,
     retryMode: normalizeRetryMode(record.retryMode, record.alwaysShowRetryButton === true),
     allowPromptRewrite: typeof record.allowPromptRewrite === 'boolean' ? record.allowPromptRewrite : false,
     taskCompletionNotification: typeof record.taskCompletionNotification === 'boolean' ? record.taskCompletionNotification : false,
@@ -1157,6 +1173,7 @@ const PRESET_PROFILE_DEPLOYMENT_KEYS = [
   'streamImages',
   'streamPartialImages',
   'transparentBackgroundMethod',
+  'svgModel',
   'providerDrafts',
 ] as const
 
@@ -1328,6 +1345,7 @@ export const DEFAULT_SETTINGS: AppSettings = normalizeSettings({
   persistInputOnRestart: true,
   reuseTaskApiProfileTemporarily: false,
   alwaysShowRetryButton: false,
+  saveTasksToActiveFavoriteCollection: true,
   retryMode: 'new',
   allowPromptRewrite: false,
   taskCompletionNotification: false,

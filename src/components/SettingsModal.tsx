@@ -6,6 +6,7 @@ import { customProviderSupportsNativeTransparentBackground } from '../lib/custom
 import { hasActiveDataOperations, trackDataTransfer } from '../lib/dataOperations'
 import { useSettingsDataTransfer } from '../lib/dataProgress'
 import { isApiProxyAvailable, isApiProxyLocked, readClientDevProxyConfig } from '../lib/devProxy'
+import { DEFAULT_SVG_MODEL, isGptImage26PlusModel } from '../lib/imageModels'
 import { isTauri } from '../lib/platform'
 import { useStore, exportData, importData, clearData, type SettingsTab } from '../store'
 import {
@@ -27,6 +28,7 @@ import {
   normalizeAgentMaxToolRounds,
   normalizeSettings,
   normalizeStreamPartialImages,
+  splitModelList,
   switchApiProfileProvider,
 } from '../lib/apiProfiles'
 import {
@@ -52,7 +54,7 @@ import {
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { updateModalScrollRef, useReleaseUpdates } from '../hooks/useReleaseUpdates'
-import { DEFAULT_DROPDOWN_MAX_HEIGHT, getDropdownMaxHeight } from '../lib/dropdown'
+import { DEFAULT_DROPDOWN_MAX_HEIGHT, DROPDOWN_PANEL_CLASS, DROPDOWN_SCROLL_CLASS, getDropdownMaxHeight } from '../lib/dropdown'
 import {
   buildCustomProvider,
   getApiProfileDeleteBlock,
@@ -137,6 +139,7 @@ function isPristineNewOpenAIProfile(profile: ApiProfile) {
     profile.apiKey === '' &&
     profile.model === DEFAULT_IMAGES_MODEL &&
     profile.imageGenerationModel === DEFAULT_IMAGES_MODEL &&
+    !profile.svgModel &&
     profile.timeout === DEFAULT_SETTINGS.timeout &&
     profile.apiMode === 'images' &&
     profile.reasoningEffort === undefined &&
@@ -252,6 +255,12 @@ export default function SettingsModal() {
   const activeCustomProviderSupportsNativeTransparentBackground = !activeCustomProvider || customProviderSupportsNativeTransparentBackground(activeCustomProvider)
   const activeProfileApiProxyEligible = isProfileApiProxyEligible(draft, activeProfile)
   const activeCustomProviderAsync = isAsyncCustomProvider(activeCustomProvider)
+  const isResponsesProfile = activeProfile.provider === 'openai' && (activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode) === 'responses'
+  // 只有 GPT Image 2.6 及以上能输出 SVG，才需要填写编写 SVG 的文本模型
+  // fal.ai 的 SVG 暂不开放，原因见 falAiImageApi 中的说明；恢复时把 fal 加回判断
+  const showSvgModel = activeProfile.provider !== 'fal' && !activeProfile.codexCli && (isResponsesProfile
+    ? isGptImage26PlusModel(activeProfile.imageGenerationModel ?? '')
+    : splitModelList(activeProfile.model).some(isGptImage26PlusModel))
   const apiProxyChecked = activeProfileApiProxyEligible && (apiProxyLocked || activeProfile.apiProxy)
   const apiProxyEnabled = apiProxyAvailable && activeProfileApiProxyEligible && apiProxyChecked
   const defaultProviderOrder = ['openai', 'sb2api-async', 'fal', ...draft.customProviders.map(p => p.id)]
@@ -1303,110 +1312,109 @@ export default function SettingsModal() {
                     
                     {showProfileMenu && !profileMenuDisabled && (
                       <>
-                        <div
-                          className="absolute right-0 top-full z-50 mt-1.5 w-full overflow-hidden overflow-y-auto rounded-xl border border-transparent bg-white/95 shadow-[0_8px_30px_rgb(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur-xl animate-dropdown-down dark:bg-gray-800/95 dark:shadow-[0_8px_30px_rgb(0,0,0,0.4)] dark:ring-white/[0.06] custom-scrollbar"
-                          style={{ maxHeight: profileMenuMaxHeight }}
-                        >
-                          {!presetConfigOnly && <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              createNewProfile()
-                            }}
-                            className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10"
-                          >
-                            <span className="truncate font-semibold">创建新配置</span>
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                              <PlusIcon className="h-4 w-4" />
-                            </span>
-                          </button>}
-                          <div>
-                            {visibleProfiles.map((profile) => {
-                              const isDefaultProfile = profile.id === defaultProfileId
-                              const isPresetProfile = presetProfileIds.has(profile.id)
-                              return (
-                                <div
-                                  key={profile.id}
-                                  data-profile-id={profile.id}
-                                  title={profile.name}
-                                  draggable={!presetConfigOnly}
-                                  onDragStart={(e) => handleProfileDragStart(e, profile.id)}
-                                  onDragOver={(e) => handleProfileDragOver(e, profile.id)}
-                                  onDrop={(e) => handleProfileDrop(e, profile.id)}
-                                  onDragEnd={handleProfileDragEnd}
-                                  onTouchStart={(e) => handleProfileTouchStart(e, profile)}
-                                  onTouchMove={handleProfileTouchMove}
-                                  onTouchEnd={handleProfileTouchEnd}
-                                  onTouchCancel={handleProfileDragEnd}
-                                  onClick={(e) => {
-                                    // 点击拖拽柄时不切换配置。
-                                    if ((e.target as HTMLElement).closest('[data-drag-handle]')) return
-                                    e.preventDefault()
-                                    switchProfile(profile.id)
-                                  }}
-                                  className={`relative group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left text-xs transition-colors ${draggedProfileId === profile.id ? 'opacity-40 bg-gray-100 dark:bg-white/[0.04]' : profile.id === activeProfile.id ? 'bg-black/[0.05] font-medium text-blue-600 dark:bg-white/[0.08] dark:text-blue-400' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/[0.06]'}`}
-                                >
-                                {dragOverProfileId === profile.id && dragDropPosition === 'before' && draggedProfileId !== profile.id && (
-                                  <div className="absolute -top-[1px] left-0 right-0 h-[2px] bg-blue-500 rounded-full z-40 shadow-sm pointer-events-none" />
-                                )}
-                                {dragOverProfileId === profile.id && dragDropPosition === 'after' && draggedProfileId !== profile.id && (
-                                  <div className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-blue-500 rounded-full z-40 shadow-sm pointer-events-none" />
-                                )}
-                                <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-                                  {!presetConfigOnly && (
-                                    <div
-                                      data-drag-handle
-                                      className="flex cursor-grab active:cursor-grabbing items-center justify-center text-gray-400 opacity-60 transition-opacity hover:opacity-100 dark:text-gray-500"
-                                      style={{ touchAction: 'none' }}
-                                      title="拖拽排序"
-                                    >
-                                      <DragHandleIcon className="h-3.5 w-3.5" />
-                                    </div>
-                                  )}
-                                  <span className="min-w-0 truncate">{profile.name}</span>
-                                  <span className={`rounded px-1.5 py-0.5 text-[10px] shrink-0 ${profile.id === activeProfile.id ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400'}`}>
-                                    {getApiProviderLabel(draft, profile.provider)}
-                                  </span>
-                                </div>
-                                
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <button
-                                    type="button"
+                        <div className={`absolute right-0 top-full z-50 mt-1.5 w-full animate-dropdown-down ${DROPDOWN_PANEL_CLASS}`} style={{ maxHeight: profileMenuMaxHeight }}>
+                          <div className={DROPDOWN_SCROLL_CLASS}>
+                            {!presetConfigOnly && <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                createNewProfile()
+                              }}
+                              className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10"
+                            >
+                              <span className="truncate font-semibold">创建新配置</span>
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                                <PlusIcon className="h-4 w-4" />
+                              </span>
+                            </button>}
+                            <div>
+                              {visibleProfiles.map((profile) => {
+                                const isDefaultProfile = profile.id === defaultProfileId
+                                const isPresetProfile = presetProfileIds.has(profile.id)
+                                return (
+                                  <div
+                                    key={profile.id}
+                                    data-profile-id={profile.id}
+                                    title={profile.name}
+                                    draggable={!presetConfigOnly}
+                                    onDragStart={(e) => handleProfileDragStart(e, profile.id)}
+                                    onDragOver={(e) => handleProfileDragOver(e, profile.id)}
+                                    onDrop={(e) => handleProfileDrop(e, profile.id)}
+                                    onDragEnd={handleProfileDragEnd}
+                                    onTouchStart={(e) => handleProfileTouchStart(e, profile)}
+                                    onTouchMove={handleProfileTouchMove}
+                                    onTouchEnd={handleProfileTouchEnd}
+                                    onTouchCancel={handleProfileDragEnd}
                                     onClick={(e) => {
+                                      // 点击拖拽柄时不切换配置。
+                                      if ((e.target as HTMLElement).closest('[data-drag-handle]')) return
                                       e.preventDefault()
-                                      e.stopPropagation()
-                                      confirmCopyProfileImportUrl(profile)
+                                      switchProfile(profile.id)
                                     }}
-                                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 opacity-60 transition-all hover:bg-gray-100 hover:text-gray-600 hover:opacity-100 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
-                                    aria-label={`复制导入配置「${profile.name}」的 URL`}
-                                    title="复制导入 URL"
+                                    className={`relative group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left text-xs transition-colors ${draggedProfileId === profile.id ? 'opacity-40 bg-gray-100 dark:bg-white/[0.04]' : profile.id === activeProfile.id ? 'bg-black/[0.05] font-medium text-blue-600 dark:bg-white/[0.08] dark:text-blue-400' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/[0.06]'}`}
                                   >
-                                    <LinkIcon className="h-3.5 w-3.5" />
-                                  </button>
-                                  {!presetConfigOnly && (isDefaultProfile || draft.profiles.length > 1) && (
-                                    <TooltipButton
-                                      tooltip={isPresetProfile && presetDeletionPrevented ? '预置配置不可删除' : '删除配置'}
-                                      disabled={isPresetProfile && presetDeletionPrevented}
-                                      showOnClick={isPresetProfile && presetDeletionPrevented}
-                                      stopPropagation
+                                  {dragOverProfileId === profile.id && dragDropPosition === 'before' && draggedProfileId !== profile.id && (
+                                    <div className="absolute -top-[1px] left-0 right-0 h-[2px] bg-blue-500 rounded-full z-40 shadow-sm pointer-events-none" />
+                                  )}
+                                  {dragOverProfileId === profile.id && dragDropPosition === 'after' && draggedProfileId !== profile.id && (
+                                    <div className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-blue-500 rounded-full z-40 shadow-sm pointer-events-none" />
+                                  )}
+                                  <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+                                    {!presetConfigOnly && (
+                                      <div
+                                        data-drag-handle
+                                        className="flex cursor-grab active:cursor-grabbing items-center justify-center text-gray-400 opacity-60 transition-opacity hover:opacity-100 dark:text-gray-500"
+                                        style={{ touchAction: 'none' }}
+                                        title="拖拽排序"
+                                      >
+                                        <DragHandleIcon className="h-3.5 w-3.5" />
+                                      </div>
+                                    )}
+                                    <span className="min-w-0 truncate">{profile.name}</span>
+                                    <span className={`rounded px-1.5 py-0.5 text-[10px] shrink-0 ${profile.id === activeProfile.id ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400'}`}>
+                                      {getApiProviderLabel(draft, profile.provider)}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                      type="button"
                                       onClick={(e) => {
                                         e.preventDefault()
-                                        setConfirmDialog({
-                                          title: '删除配置',
-                                          message: `确定要删除配置「${profile.name}」吗？`,
-                                          action: () => deleteProfile(profile.id)
-                                        })
+                                        e.stopPropagation()
+                                        confirmCopyProfileImportUrl(profile)
                                       }}
-                                      wrapperClassName="relative flex h-5 w-5 shrink-0"
-                                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-60 transition-all ${isPresetProfile && presetDeletionPrevented ? 'cursor-not-allowed text-gray-300 dark:text-gray-600' : 'text-gray-400 hover:bg-red-500/[0.1] hover:text-red-600 hover:opacity-100 dark:hover:bg-red-500/[0.16]'}`}
+                                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 opacity-60 transition-all hover:bg-gray-100 hover:text-gray-600 hover:opacity-100 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
+                                      aria-label={`复制导入配置「${profile.name}」的 URL`}
+                                      title="复制导入 URL"
                                     >
-                                      <TrashIcon className="h-3.5 w-3.5" />
-                                    </TooltipButton>
-                                  )}
+                                      <LinkIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                    {!presetConfigOnly && (isDefaultProfile || draft.profiles.length > 1) && (
+                                      <TooltipButton
+                                        tooltip={isPresetProfile && presetDeletionPrevented ? '预置配置不可删除' : '删除配置'}
+                                        disabled={isPresetProfile && presetDeletionPrevented}
+                                        showOnClick={isPresetProfile && presetDeletionPrevented}
+                                        stopPropagation
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          setConfirmDialog({
+                                            title: '删除配置',
+                                            message: `确定要删除配置「${profile.name}」吗？`,
+                                            action: () => deleteProfile(profile.id)
+                                          })
+                                        }}
+                                        wrapperClassName="relative flex h-5 w-5 shrink-0"
+                                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-60 transition-all ${isPresetProfile && presetDeletionPrevented ? 'cursor-not-allowed text-gray-300 dark:text-gray-600' : 'text-gray-400 hover:bg-red-500/[0.1] hover:text-red-600 hover:opacity-100 dark:hover:bg-red-500/[0.16]'}`}
+                                      >
+                                        <TrashIcon className="h-3.5 w-3.5" />
+                                      </TooltipButton>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              )
-                            })}
+                                )
+                              })}
+                            </div>
                           </div>
                         </div>
                       </>
@@ -1556,7 +1564,7 @@ export default function SettingsModal() {
                     className="w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50"
                   />
                 <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
-                    支持通过链接参数导入：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=images</code> 或 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=responses</code>。
+                    Images API 直接请求图像模型；Responses API 由文本模型调用图像生成工具。支持通过链接参数导入：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?apiMode=images</code> 或 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?apiMode=responses</code>。
                   </div>
                 </div>
               )}
@@ -1564,7 +1572,7 @@ export default function SettingsModal() {
               {/* 7. 模型 ID（紧跟接口选择） */}
               <label className="block">
                 <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">
-                  模型 ID
+                  {isResponsesProfile ? '文本模型 ID' : '模型 ID'}
                 </span>
                 <input
                   value={activeProfile.model}
@@ -1575,19 +1583,21 @@ export default function SettingsModal() {
                   placeholder={activeProfile.provider === 'fal' ? DEFAULT_FAL_MODEL : getDefaultModelForMode(activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode)}
                   className="w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50"
                 />
-                  <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
+                <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
                   {activeProfile.provider === 'fal' ? (
                     <>
                       当前支持：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">openai/gpt-image-2</code>{' '}
                       <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">openai/gpt-image-2.5/sunburst</code>{' '}
-                      <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">openai/gpt-image-2.5/flare</code>。
+                      <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">openai/gpt-image-2.5/flare</code>{' '}
+                      <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">openai/gpt-image-2.6/sunburst</code>{' '}
+                      <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">openai/gpt-image-2.6/flare</code>。
                     </>
                   ) : activeCustomProvider ? (
                     <>当前使用 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{activeCustomProvider.name}</code>。</>
-                  ) : (activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode) === 'responses' ? (
-                    <>Responses API 需要使用支持 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">image_generation</code> 工具的文本模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_RESPONSES_MODEL}</code>。</>
+                  ) : isResponsesProfile ? (
+                    <>接收提示词并调用 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">image_generation</code> 工具的文本模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_RESPONSES_MODEL}</code>。</>
                   ) : (
-                    <>Images API 需要使用 GPT Image 模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。</>
+                    <>GPT Image 模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。</>
                   )}
                   多个模型以逗号分隔，可在首页的模型参数中切换。
                   {activeProfile.provider === 'openai' && (
@@ -1605,27 +1615,7 @@ export default function SettingsModal() {
                 />
               )}
 
-              {activeProfile.provider === 'openai' && activeProfile.apiMode === 'responses' && (
-                <label className="block">
-                  <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">图像生成模型</span>
-                  <input
-                    value={activeProfile.imageGenerationModel ?? ''}
-                    onChange={(e) => updateActiveProfile({ imageGenerationModel: e.target.value })}
-                    onBlur={(e) => commitActiveProfilePatch({ imageGenerationModel: e.target.value })}
-                    type="text"
-                    disabled={activeProfileLocked}
-                    placeholder={DEFAULT_IMAGES_MODEL}
-                    className="w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50"
-                  />
-                  <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
-                    Responses API 的 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">image_generation</code> 工具需要使用 GPT Image 模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。
-                    留空时不发送工具模型 ID，保持 API 默认值。
-                    支持通过链接参数导入：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?imageGenerationModel=</code>。
-                  </div>
-                </label>
-              )}
-
-              {(activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode) === 'responses' && activeProfile.provider === 'openai' && (
+              {isResponsesProfile && (
                 <div className="block">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
                     <span className="block text-sm text-gray-600 dark:text-gray-300">推理强度</span>
@@ -1643,9 +1633,45 @@ export default function SettingsModal() {
                     </div>
                   </div>
                   <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
-                    用于指导模型在执行任务时的思考深度，更高的档位会使模型花费更长时间进行思考，有助于提升 Agent 模式下模型完成复杂任务的能力。并非所有模型都支持全部推理强度。支持通过链接参数导入：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?reasoningEffort=high</code>。
+                    文本模型的思考深度，档位越高耗时越长，有助于 Agent 模式完成复杂任务。并非所有模型都支持全部档位，调用图像生成工具时不支持 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">minimal</code>。支持通过链接参数导入：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?reasoningEffort=</code>。
                   </div>
                 </div>
+              )}
+
+              {isResponsesProfile && (
+                <label className="block">
+                  <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">图像模型 ID</span>
+                  <input
+                    value={activeProfile.imageGenerationModel ?? ''}
+                    onChange={(e) => updateActiveProfile({ imageGenerationModel: e.target.value })}
+                    onBlur={(e) => commitActiveProfilePatch({ imageGenerationModel: e.target.value })}
+                    type="text"
+                    disabled={activeProfileLocked}
+                    placeholder="留空使用接口默认值"
+                    className="w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50"
+                  />
+                  <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
+                    <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">image_generation</code> 工具实际出图的 GPT Image 模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。支持通过链接参数导入：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?imageGenerationModel=</code>。
+                  </div>
+                </label>
+              )}
+
+              {showSvgModel && (
+                <label className="block">
+                  <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">SVG 编写模型 ID</span>
+                  <input
+                    value={activeProfile.svgModel ?? ''}
+                    onChange={(e) => updateActiveProfile({ svgModel: e.target.value })}
+                    onBlur={(e) => commitActiveProfilePatch({ svgModel: e.target.value.trim() || undefined })}
+                    type="text"
+                    disabled={activeProfileLocked}
+                    placeholder={DEFAULT_SVG_MODEL}
+                    className="w-full rounded-xl border border-transparent bg-black/[0.04] px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:bg-white/[0.06] dark:text-gray-200 dark:focus:border-blue-500/50"
+                  />
+                  <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
+                    输出 SVG 时，图像模型先生成参考图，再由该文本模型编写 SVG，其 token 用量另行计费。留空时使用 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_SVG_MODEL}</code>。
+                  </div>
+                </label>
               )}
 
               {/* 8. 流式传输 + 中间步骤图像数 */}

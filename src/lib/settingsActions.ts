@@ -38,6 +38,8 @@ export function isAsyncCustomProvider(provider: CustomProviderDefinition | null 
 
 export function isProfileApiProxyEligible(settings: AppSettings, profile: ApiProfile) {
   if (!isOpenAICompatibleProvider(settings, profile.provider)) return false
+  // The built-in sub2api async transport supports the proxy for both submit and polling.
+  if (profile.provider === 'sb2api-async') return true
   const customProvider = getCustomProviderDefinition(settings, profile.provider)
   return !isAsyncCustomProvider(customProvider)
 }
