@@ -70,6 +70,7 @@ import { Checkbox } from './Checkbox'
 import ViewportTooltip from './ViewportTooltip'
 import { ChevronDownIcon, CloseIcon, CopyIcon, PlusIcon, TrashIcon, ExportIcon, ImportIcon, DragHandleIcon, LinkIcon, SparklesIcon } from './icons'
 import { TooltipButton } from './TooltipButton'
+import ModelDiscoveryPicker from './settings/ModelDiscoveryPicker'
 import GeneralSettingsTab from './settings/GeneralSettingsTab'
 import AppearanceSettingsTab from './settings/AppearanceSettingsTab'
 import AgentSettingsTab from './settings/AgentSettingsTab'
@@ -1594,6 +1595,15 @@ export default function SettingsModal() {
                   )}
                 </div>
               </label>
+
+              {(activeProfile.provider === 'openai' || activeProfile.provider === 'sb2api-async') && (
+                <ModelDiscoveryPicker
+                  key={activeProfile.id + ':' + activeProfile.provider + ':' + activeProfile.baseUrl + ':' + activeProfile.apiKey + ':' + activeProfile.apiProxy}
+                  profile={activeProfile}
+                  disabled={activeProfileLocked}
+                  onApply={(model) => commitActiveProfilePatch({ model })}
+                />
+              )}
 
               {activeProfile.provider === 'openai' && activeProfile.apiMode === 'responses' && (
                 <label className="block">
