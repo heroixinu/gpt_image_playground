@@ -243,8 +243,9 @@ Vercel 分配的 `.vercel.app` 域名在国内通常无法直接访问，可在 
 
 配置完成后：
 
-- **自动更新**：本仓库发布正式版本（版本号变动）后，在 Fork 页面点击 **Sync fork** 会触发 Vercel 部署；普通提交不会触发。
+- **自动更新**：任何代码提交到 Fork 的 `main` 分支（包括合并 PR、点击 **Sync fork**、直接推送）都会触发 **Deploy to Vercel**，无需修改 `package.json` 版本号或等待上游 Release。推送 `v*` tag 时仍保留原有客户端构建与部署协调流程。
 - **手动触发**：在 **Actions** 中选择 **Deploy to Vercel**，对 `main` 分支执行 **Run workflow**，可立即部署最新代码（包括未发布的提交）。
+- **注意**：工作流通过 `VERCEL_DEPLOY_HOOK` 调用 Vercel Deploy Hook；若未设置该 Secret，GitHub Actions 会运行，但实际不会触发 Vercel 构建。Vercel 的原生 Git 自动部署仍由 `vercel.json` 禁用。
 
 </details>
 
