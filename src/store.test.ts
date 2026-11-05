@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
-import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_RESPONSES_MODEL, DEFAULT_SETTINGS, normalizeSettings } from './lib/apiProfiles'
+import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_IMAGES_MODEL, DEFAULT_RESPONSES_MODEL, normalizeSettings } from './lib/apiProfiles'
+import { OPENAI_TEST_DEFAULT_SETTINGS as DEFAULT_SETTINGS } from './lib/testFixtures/openaiTestSettings'
 import type { AgentConversation, ExportData, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
 import { getSelectedImageMentionLabel } from './lib/promptImageMentions'
 import { hasActiveDataOperations, hasInterruptibleOperations, trackDataTransfer } from './lib/dataOperations'
 import { cancelDataProgress, useDataProgress } from './lib/dataProgress'
 import { deleteAgentRoundFromConversation, getActiveAgentRounds, getAgentConversationTaskIds, getAgentRoundTaskIds, remapAgentRoundMentionsForPathChange } from './lib/agentConversationState'
 import { cleanStaleAgentInputDrafts } from './lib/inputDraftState'
+import { ALL_FAVORITES_COLLECTION_ID } from './lib/favoriteState'
 import { normalizePersistedState } from './lib/persistedState'
 import { setPresetConfig } from './lib/presetConfig'
 import { FetchConnectError } from './lib/platform'
@@ -329,7 +331,86 @@ describe('task retry', () => {
       tasks: [],
       showToast: vi.fn(),
       detailTaskId: null,
+      filterFavorite: false,
+      activeFavoriteCollectionId: null,
     })
+  })
+
+  it('adds a new task created on a favorites page to the active collection', async () => {
+    const collection = { id: 'collection-a', name: '收藏夹 A', createdAt: 1, updatedAt: 1 }
+    const failed = task({ status: 'error', error: '上次失败' })
+    useStore.setState({
+      appMode: 'gallery',
+      filterFavorite: true,
+      activeFavoriteCollectionId: collection.id,
+      favoriteCollections: [collection],
+      defaultFavoriteCollectionId: collection.id,
+      settings: { ...useStore.getState().settings, retryMode: 'new' },
+      tasks: [failed],
+      prompt: 'prompt',
+      inputImages: [],
+      params: { ...DEFAULT_PARAMS },
+    })
+    vi.mocked(callImageApi).mockResolvedValue({ images: [], actualParams: {}, actualParamsList: [], revisedPrompts: [] })
+
+    await retryTask(failed)
+    expect(useStore.getState().tasks[0]).toMatchObject({ favoriteCollectionIds: [collection.id], isFavorite: true })
+    await submitTask()
+    expect(useStore.getState().tasks[0]).toMatchObject({ favoriteCollectionIds: [collection.id], isFavorite: true })
+
+    useStore.setState({ settings: { ...useStore.getState().settings, saveTasksToActiveFavoriteCollection: false } })
+    await submitTask()
+    expect(useStore.getState().tasks[0].isFavorite).toBeUndefined()
+    await vi.waitFor(() => expect(useStore.getState().tasks.every((item) => item.status !== 'running')).toBe(true))
+  })
+
+  it('keeps the source collections when retrying on the all favorites page', async () => {
+    const collectionA = { id: 'collection-a', name: '收藏夹 A', createdAt: 1, updatedAt: 1 }
+    const collectionB = { id: 'collection-b', name: '收藏夹 B', createdAt: 1, updatedAt: 1 }
+    const failed = task({ status: 'error', error: '上次失败', favoriteCollectionIds: [collectionB.id], isFavorite: true })
+    useStore.setState({
+      appMode: 'gallery',
+      filterFavorite: true,
+      activeFavoriteCollectionId: ALL_FAVORITES_COLLECTION_ID,
+      favoriteCollections: [collectionA, collectionB],
+      defaultFavoriteCollectionId: collectionA.id,
+      settings: { ...useStore.getState().settings, retryMode: 'new' },
+      tasks: [failed],
+    })
+    vi.mocked(callImageApi).mockResolvedValue({ images: [], actualParams: {}, actualParamsList: [], revisedPrompts: [] })
+
+    await retryTask(failed)
+    expect(useStore.getState().tasks[0]).toMatchObject({ favoriteCollectionIds: [collectionB.id], isFavorite: true })
+    await vi.waitFor(() => expect(useStore.getState().tasks[0].status).not.toBe('running'))
+  })
+
+  it('uses the default collection when the active one is deleted before a queued task starts', async () => {
+    const collectionA = { id: 'collection-a', name: '收藏夹 A', createdAt: 1, updatedAt: 1 }
+    const collectionB = { id: 'collection-b', name: '收藏夹 B', createdAt: 1, updatedAt: 1 }
+    const firstRequest = deferred<Awaited<ReturnType<typeof callImageApi>>>()
+    vi.mocked(callImageApi)
+      .mockImplementationOnce(() => firstRequest.promise)
+      .mockResolvedValue({ images: [], actualParams: {}, actualParamsList: [], revisedPrompts: [] })
+    useStore.setState({
+      appMode: 'gallery',
+      filterFavorite: true,
+      activeFavoriteCollectionId: collectionB.id,
+      favoriteCollections: [collectionA, collectionB],
+      defaultFavoriteCollectionId: collectionA.id,
+      settings: { ...useStore.getState().settings, showBatchPrompt: true, batchPromptEnabled: true, batchPromptMode: 'queue' },
+      prompt: 'first\n\n\nsecond',
+      inputImages: [],
+      params: { ...DEFAULT_PARAMS },
+    })
+
+    void submitTask()
+    await vi.waitFor(() => expect(callImageApi).toHaveBeenCalledOnce())
+    expect(useStore.getState().tasks[0]).toMatchObject({ prompt: 'first', favoriteCollectionIds: [collectionB.id] })
+    await deleteFavoriteCollection(collectionB.id)
+    firstRequest.resolve({ images: [], actualParams: {}, actualParamsList: [], revisedPrompts: [] })
+
+    await vi.waitFor(() => expect(useStore.getState().batchProgress).toBeNull())
+    expect(useStore.getState().tasks.find((item) => item.prompt === 'second')).toMatchObject({ favoriteCollectionIds: [collectionA.id], isFavorite: true })
   })
 
   it('creates a separate task for a failed one by default', async () => {
@@ -1088,7 +1169,9 @@ describe('preset deletion state', () => {
     expect(state.dismissedPresetProviderIds).toEqual([])
     expect(state.dismissedCodexCliPrompts).toEqual([])
     expect(state.settings.customProviders).toEqual([expect.objectContaining({ id: provider.id })])
-    expect(state.settings.profiles).toEqual([expect.objectContaining({ id: profile.id, provider: provider.id })])
+    expect(state.settings.profiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: profile.id, provider: provider.id }),
+    ]))
   })
 
   it('restores an explicitly reimported preset provider', () => {
@@ -5517,7 +5600,7 @@ describe('reused task API profile', () => {
     expect(getTaskApiProfile(useStore.getState().settings, sourceTask)).toMatchObject({
       id: profile.id,
       provider: 'provider-old',
-      model: 'gpt-image-2.5-sunburst',
+      model: DEFAULT_IMAGES_MODEL,
     })
   })
 

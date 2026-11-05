@@ -5,7 +5,7 @@ import {
   DEFAULT_IMAGES_MODEL,
   DEFAULT_RESPONSES_MODEL,
   DEFAULT_OPENAI_PROFILE_ID,
-  DEFAULT_SETTINGS,
+  DEFAULT_SETTINGS as DEPLOYMENT_DEFAULT_SETTINGS,
   createDefaultOpenAIProfile,
   createDefaultFalProfile,
   getApiProviderLabel,
@@ -25,16 +25,16 @@ import {
   validateApiProfile,
 } from './apiProfiles'
 import { CUSTOM_PROVIDER_LLM_PROMPT, DEFAULT_CUSTOM_PROVIDER_JSON } from './settingsCustomProvider'
+import { OPENAI_TEST_DEFAULT_SETTINGS as DEFAULT_SETTINGS } from './testFixtures/openaiTestSettings'
 
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
 describe('default deployment profile', () => {
-  it('uses the async Sub2API provider for a deployment without an explicit preset', () => {
-    const profile = DEFAULT_SETTINGS.profiles[0]
-    expect(profile.provider).toBe('sb2api-async')
-    expect(profile.streamImages).toBe(false)
+  it('keeps the async sub2api provider as the default', () => {
+    expect(DEPLOYMENT_DEFAULT_SETTINGS.profiles[0].provider).toBe('sb2api-async')
+    expect(DEPLOYMENT_DEFAULT_SETTINGS.profiles[0].streamImages).toBe(false)
   })
 })
 
@@ -178,15 +178,17 @@ describe('default API URL env', () => {
       streamPartialImages: 3,
       transparentBackgroundMethod: 'local',
     })
+    // The fork intentionally pins sub2api (Images mode) as its deployed default.
     expect(DEFAULT_SETTINGS.profiles[0]).toMatchObject({
+      provider: 'sb2api-async',
       id: DEFAULT_OPENAI_PROFILE_ID,
       name: 'URL Profile',
       baseUrl: 'https://api.example.com',
       model: 'test-image-model',
-      apiMode: 'responses',
+      apiMode: 'images',
       reasoningEffort: 'xhigh',
       codexCli: true,
-      streamImages: true,
+      streamImages: false,
       streamPartialImages: 3,
       transparentBackgroundMethod: 'local',
     })
@@ -722,6 +724,21 @@ describe('mergePresetImportedSettings', () => {
 
     expect(merged.profiles[0]).toMatchObject({ id: 'source-profile', model: 'model-v2' })
     expect(merged.customProviders[0]).toMatchObject({ id: 'source-provider', submit: { path: 'v2/generate' } })
+  })
+
+  it('syncs a changed SVG authoring model from the deployment', () => {
+    const withSvgModel = (svgModel: string) => {
+      const config = createConfig('model-v1', 'old/generate')
+      return { ...config, profiles: [{ ...config.profiles[0], provider: 'openai', svgModel }], customProviders: [] }
+    }
+    const initial = mergeDefaultImportedSettings(DEFAULT_SETTINGS, withSvgModel('svg-v1'))
+    expect(initial.settings.profiles[0].svgModel).toBe('svg-v1')
+
+    const unlocked = mergeDefaultImportedSettings(initial.settings, withSvgModel('svg-v2'), { previousPresetConfig: initial.presetConfig })
+    expect(unlocked.settings.profiles[0].svgModel).toBe('svg-v2')
+
+    const locked = mergeDefaultImportedSettings(unlocked.settings, withSvgModel('svg-v3'), { previousPresetConfig: unlocked.presetConfig, lockPresetParams: true })
+    expect(locked.settings.profiles[0].svgModel).toBe('svg-v3')
   })
 
   it('keeps the local API key while updating other locked preset parameters', () => {

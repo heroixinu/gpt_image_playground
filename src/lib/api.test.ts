@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS } from '../types'
-import { createDefaultOpenAIProfile, DEFAULT_IMAGES_MODEL, DEFAULT_SETTINGS } from './apiProfiles'
+import { createDefaultOpenAIProfile, DEFAULT_IMAGES_MODEL } from './apiProfiles'
+import { OPENAI_TEST_DEFAULT_SETTINGS as DEFAULT_SETTINGS } from './testFixtures/openaiTestSettings'
 import { normalizePersistedState } from './persistedState'
 import { callImageApi } from './api'
 import { maybeAppendImageToolDroppedHint, maybeAppendStreamingHint } from './imageApiShared'
@@ -1520,11 +1521,19 @@ describe('callImageApi', () => {
     })).rejects.toThrow('请将「透明背景实现方式」切换为「本地后处理」')
   })
 
-  it('rejects API proxy for async custom providers', async () => {
+  it('proxies submission and polling for asynchronous providers', async () => {
     vi.stubEnv('VITE_API_PROXY_AVAILABLE', 'true')
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input) === '/api-proxy/images/generations') {
+        return new Response(JSON.stringify({ task_id: 'task-1' }), { status: 200 })
+      }
+      if (String(input) === '/api-proxy/images/tasks/task-1') {
+        return new Response(JSON.stringify({ status: 'done', data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 })
+      }
+      throw new Error('Unexpected request: ' + String(input))
+    })
 
-    await expect(callImageApi({
+    const result = await callImageApi({
       settings: {
         ...DEFAULT_SETTINGS,
         baseUrl: '',
@@ -1565,9 +1574,12 @@ describe('callImageApi', () => {
       prompt: 'prompt',
       params: { ...DEFAULT_PARAMS },
       inputImageDataUrls: [],
-    })).rejects.toThrow('异步任务的自定义服务商')
-
-    expect(fetchMock).not.toHaveBeenCalled()
+    })
+    expect(result.images).toHaveLength(1)
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      '/api-proxy/images/generations',
+      '/api-proxy/images/tasks/task-1',
+    ])
   })
 
   it('uses the same-origin API proxy path when API proxy is locked', async () => {
@@ -1769,7 +1781,7 @@ describe('callImageApi', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://sub2api.example.com/v1/images/generations/async')
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
-      model: 'gpt-image-2.5-sunburst',
+      model: DEFAULT_IMAGES_MODEL,
       prompt: 'prompt',
       n: 1,
     })
