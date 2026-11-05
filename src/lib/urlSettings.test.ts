@@ -3,10 +3,10 @@ import {
   createDefaultFalProfile,
   createDefaultOpenAIProfile,
   DEFAULT_IMAGES_MODEL,
-  DEFAULT_SETTINGS,
   normalizeSettings,
 } from './apiProfiles'
 import { buildSettingsFromUrlParams, clearUrlSettingParams, getExplicitUrlSettingsIds, hasUrlSettingParams } from './urlSettings'
+import { OPENAI_TEST_DEFAULT_SETTINGS as DEFAULT_SETTINGS } from './testFixtures/openaiTestSettings'
 
 afterEach(() => {
   vi.unstubAllEnvs()

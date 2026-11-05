@@ -5,7 +5,7 @@ import {
   DEFAULT_IMAGES_MODEL,
   DEFAULT_RESPONSES_MODEL,
   DEFAULT_OPENAI_PROFILE_ID,
-  DEFAULT_SETTINGS,
+  DEFAULT_SETTINGS as DEPLOYMENT_DEFAULT_SETTINGS,
   createDefaultOpenAIProfile,
   createDefaultFalProfile,
   getApiProviderLabel,
@@ -25,6 +25,7 @@ import {
   validateApiProfile,
 } from './apiProfiles'
 import { CUSTOM_PROVIDER_LLM_PROMPT, DEFAULT_CUSTOM_PROVIDER_JSON } from './settingsCustomProvider'
+import { OPENAI_TEST_DEFAULT_SETTINGS as DEFAULT_SETTINGS } from './testFixtures/openaiTestSettings'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -32,8 +33,8 @@ afterEach(() => {
 
 describe('default deployment profile', () => {
   it('keeps the async sub2api provider as the default', () => {
-    expect(DEFAULT_SETTINGS.profiles[0].provider).toBe('sb2api-async')
-    expect(DEFAULT_SETTINGS.profiles[0].streamImages).toBe(false)
+    expect(DEPLOYMENT_DEFAULT_SETTINGS.profiles[0].provider).toBe('sb2api-async')
+    expect(DEPLOYMENT_DEFAULT_SETTINGS.profiles[0].streamImages).toBe(false)
   })
 })
 
@@ -177,15 +178,17 @@ describe('default API URL env', () => {
       streamPartialImages: 3,
       transparentBackgroundMethod: 'local',
     })
+    // The fork intentionally pins sub2api (Images mode) as its deployed default.
     expect(DEFAULT_SETTINGS.profiles[0]).toMatchObject({
+      provider: 'sb2api-async',
       id: DEFAULT_OPENAI_PROFILE_ID,
       name: 'URL Profile',
       baseUrl: 'https://api.example.com',
       model: 'test-image-model',
-      apiMode: 'responses',
+      apiMode: 'images',
       reasoningEffort: 'xhigh',
       codexCli: true,
-      streamImages: true,
+      streamImages: false,
       streamPartialImages: 3,
       transparentBackgroundMethod: 'local',
     })

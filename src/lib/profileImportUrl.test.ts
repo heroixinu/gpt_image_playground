@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createDefaultOpenAIProfile, DEFAULT_SETTINGS, importCustomProviderSettingsFromJson, normalizeSettings } from './apiProfiles'
+import { createDefaultOpenAIProfile, importCustomProviderSettingsFromJson, normalizeSettings } from './apiProfiles'
+import { OPENAI_TEST_DEFAULT_SETTINGS as DEFAULT_SETTINGS } from './testFixtures/openaiTestSettings'
 import { createCustomProfileImportUrl } from './profileImportUrl'
 import { buildSettingsFromUrlParams } from './urlSettings'
 
