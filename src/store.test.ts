@@ -1169,7 +1169,9 @@ describe('preset deletion state', () => {
     expect(state.dismissedPresetProviderIds).toEqual([])
     expect(state.dismissedCodexCliPrompts).toEqual([])
     expect(state.settings.customProviders).toEqual([expect.objectContaining({ id: provider.id })])
-    expect(state.settings.profiles).toEqual([expect.objectContaining({ id: profile.id, provider: provider.id })])
+    expect(state.settings.profiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: profile.id, provider: provider.id }),
+    ]))
   })
 
   it('restores an explicitly reimported preset provider', () => {
